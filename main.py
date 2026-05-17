@@ -275,7 +275,7 @@ async def parse_row_with_llm(snapshot: str, template: str) -> Tuple[Any, bool]:
     )
 
     async with _llm_semaphore:
-        for attempt in range(3):
+        for attempt in range(4):
             try:
                 response = await gemini_client.aio.models.generate_content(
                     model="gemini-2.0-flash",
@@ -297,8 +297,14 @@ async def parse_row_with_llm(snapshot: str, template: str) -> Tuple[Any, bool]:
                 return result, needs_review
 
             except Exception as exc:
-                if attempt < 2:
-                    wait = 4 ** attempt          # 1s → 4s 指數退避
+                if attempt < 3:
+                    exc_name = type(exc).__name__
+                    exc_str  = str(exc)
+                    is_rate_limit = (
+                        "429" in exc_str or "ResourceExhausted" in exc_name
+                        or "TooManyRequests" in exc_name or "rate" in exc_str.lower()
+                    )
+                    wait = 65 if is_rate_limit else (2 ** attempt * 2)
                     logger.warning(
                         f"Gemini 呼叫失敗（第 {attempt + 1} 次），{wait}s 後重試：{exc}"
                     )
@@ -383,8 +389,8 @@ async def process_file(
                         "total":        total_rows,
                     })
 
-                    # 小間隔避免觸發 15 RPM 速率限制
-                    await asyncio.sleep(0.05)
+                    # 每列間隔 4 秒，確保不超過免費方案 15 RPM 上限
+                    await asyncio.sleep(4.0)
 
                 result_df = pd.concat(
                     [df.reset_index(drop=True), pd.DataFrame(parsed_rows)],
