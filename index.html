@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 異質文本自動化整理系統</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0f1a;
+      --surface:   #111827;
+      --surface-2: #1a2234;
+      --border:    #1e3a5f;
+      --accent:    #38bdf8;
+      --accent-2:  #0ea5e9;
+      --success:   #22d3b0;
+      --warning:   #fbbf24;
+      --error:     #f87171;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --radius:    12px;
+      --glow:      0 0 20px rgba(56,189,248,0.25);
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(56,189,248,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(56,189,248,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 740px;
+    }
+
+    /* ── 標題 ── */
+    .header { text-align: center; margin-bottom: 32px; }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: rgba(56,189,248,0.08);
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #e2e8f0 30%, var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    /* ── 卡片 ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.4);
+    }
+
+    /* ── 模板選擇 ── */
+    .tpl-section { margin-bottom: 20px; }
+
+    .tpl-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      display: block;
+    }
+
+    .tpl-group {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .tpl-btn {
+      position: relative;
+      padding: 10px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    .tpl-btn:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .tpl-btn.active {
+      border-color: var(--accent-2);
+      background: rgba(14,165,233,0.12);
+      color: var(--accent);
+    }
+
+    .tpl-btn .tpl-icon { font-size: 16px; display: block; margin-bottom: 4px; }
+    .tpl-btn .tpl-name { display: block; }
+    .tpl-btn .tpl-sub  { font-size: 10px; color: var(--muted); display: block; margin-top: 2px; }
+
+    /* ── 分隔線 ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 20px 0;
+    }
+
+    /* ── 拖曳上傳區 ── */
+    #drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s;
+      background: var(--surface-2);
+      position: relative;
+      overflow: hidden;
+    }
+
+    #drop-zone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(56,189,248,0.06) 0%, transparent 70%);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: var(--accent);
+      box-shadow: var(--glow);
+    }
+
+    #drop-zone:hover::before, #drop-zone.drag-over::before { opacity: 1; }
+    #drop-zone.drag-over { transform: scale(1.01); }
+
+    .drop-icon { font-size: 44px; margin-bottom: 14px; display: block; }
+    .drop-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .drop-subtitle { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
+
+    #file-input {
+      position: fixed;
+      left: -9999px;
+      top: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 22px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+
+    .btn-primary { background: var(--accent-2); color: #fff; }
+    .btn-primary:hover {
+      background: var(--accent);
+      box-shadow: 0 0 16px rgba(56,189,248,0.4);
+      transform: translateY(-1px);
+    }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .file-types { margin-top: 14px; font-size: 11px; color: var(--muted); }
+
+    /* ── 已選檔案 ── */
+    #selected-file {
+      display: none;
+      margin-top: 14px;
+      padding: 10px 14px;
+      background: rgba(56,189,248,0.07);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--accent);
+      align-items: center;
+      gap: 10px;
+    }
+
+    #selected-file.visible { display: flex; }
+    #selected-file .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    #clear-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 4px;
+      transition: color 0.2s;
+      line-height: 1;
+    }
+    #clear-btn:hover { color: var(--error); }
+
+    /* ── 送出 ── */
+    #submit-section { margin-top: 18px; display: none; }
+    #submit-section.visible { display: block; }
+
+    #submit-btn {
+      width: 100%;
+      justify-content: center;
+      padding: 13px;
+      font-size: 14px;
+      border-radius: var(--radius);
+    }
+
+    /* ── 狀態面板 ── */
+    #status-panel {
+      display: none;
+      margin-top: 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    #status-panel.visible { display: block; }
+
+    .status-header {
+      padding: 10px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #row-counter {
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .status-body { padding: 16px; }
+
+    .steps { display: flex; flex-direction: column; gap: 10px; }
+
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--muted);
+      transition: color 0.3s;
+    }
+
+    .step.active { color: var(--accent); }
+    .step.done   { color: var(--success); }
+    .step.error  { color: var(--error); }
+    .step.warn   { color: var(--warning); }
+
+    .step-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      flex-shrink: 0;
+      border: 1px solid currentColor;
+      margin-top: 1px;
+      transition: all 0.3s;
+    }
+
+    .step.active .step-icon { background: rgba(56,189,248,0.15); }
+    .step.done   .step-icon { background: rgba(34,211,176,0.15); }
+    .step.error  .step-icon { background: rgba(248,113,113,0.15); }
+
+    .step-label  { font-weight: 600; margin-bottom: 2px; }
+    .step-detail { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+    /* 進度條 */
+    .progress-track {
+      height: 4px;
+      background: var(--surface-2);
+      border-radius: 2px;
+      margin-top: 14px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--accent-2), var(--success));
+      transition: width 0.5s ease;
+    }
+
+    /* 行數進度子條 */
+    .row-track {
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      margin-top: 6px;
+      overflow: hidden;
+      display: none;
+    }
+
+    .row-track.visible { display: block; }
+
+    .row-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 1px;
+      transition: width 0.3s ease;
+    }
+
+    /* ── 動畫 ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(56,189,248,0.25);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes blink { 0%,100%{opacity:.3} 50%{opacity:1} }
+    .dots span { animation: blink 1.2s ease-in-out infinite; display: inline-block; }
+    .dots span:nth-child(2) { animation-delay: .2s; }
+    .dots span:nth-child(3) { animation-delay: .4s; }
+
+    /* ── 成功結果 ── */
+    #result-panel {
+      display: none;
+      margin-top: 18px;
+      padding: 18px 20px;
+      border-radius: var(--radius);
+      border: 1px solid var(--success);
+      background: rgba(34,211,176,0.06);
+    }
+
+    #result-panel.visible { display: flex; gap: 14px; align-items: flex-start; }
+    .result-icon { font-size: 26px; flex-shrink: 0; }
+    .result-text h3 { font-size: 14px; font-weight: 700; color: var(--success); margin-bottom: 4px; }
+    .result-text p  { font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+    /* ── 錯誤 ── */
+    #error-panel {
+      display: none;
+      margin-top: 18px;
+      padding: 14px 18px;
+      border-radius: var(--radius);
+      border: 1px solid var(--error);
+      background: rgba(248,113,113,0.06);
+      font-size: 13px;
+      color: var(--error);
+      line-height: 1.6;
+    }
+
+    #error-panel.visible { display: block; }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.9;
+    }
+
+    /* ── RWD ── */
+    @media (max-width: 520px) {
+      .card { padding: 18px 16px; }
+      .tpl-group { grid-template-columns: 1fr; }
+      h1 { font-size: 18px; }
+      #drop-zone { padding: 36px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <header class="header">
+    <div class="badge">AI-Powered · Free Tier</div>
+    <h1>AI 異質文本自動化整理系統</h1>
+    <p class="subtitle">
+      上傳多人協作的雜亂 Excel，AI 自動進行語義解析並歸一化為標準格式。<br>
+      支援多工作表、即時進度回報、三種輸出模板。
+    </p>
+  </header>
+
+  <main class="card">
+
+    <!-- ① 模板選擇 -->
+    <div class="tpl-section">
+      <span class="tpl-label">選擇輸出模板</span>
+      <div class="tpl-group">
+        <button class="tpl-btn active" data-tpl="soap">
+          <span class="tpl-icon">🏥</span>
+          <span class="tpl-name">SOAP 醫療病歷</span>
+          <span class="tpl-sub">S / O / A / P 四維度</span>
+        </button>
+        <button class="tpl-btn" data-tpl="isbar">
+          <span class="tpl-icon">📋</span>
+          <span class="tpl-name">ISBAR 交班報告</span>
+          <span class="tpl-sub">I / S / B / A / R 五維度</span>
+        </button>
+        <button class="tpl-btn" data-tpl="general">
+          <span class="tpl-icon">📝</span>
+          <span class="tpl-name">通用文本摘要</span>
+          <span class="tpl-sub">摘要 / 重點 / 行動項目</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ② 拖曳上傳 -->
+    <div id="drop-zone" role="button" tabindex="0" aria-label="拖曳或點擊上傳 Excel 檔案">
+      <span class="drop-icon">📊</span>
+      <p class="drop-title">拖曳 Excel 檔案至此，或點擊選擇</p>
+      <p class="drop-subtitle">支援 .xlsx 與 .xls，上限 10 MB</p>
+      <label class="btn btn-primary" id="pick-btn" style="cursor:pointer;">
+        選擇檔案
+        <input type="file" id="file-input" accept=".xlsx,.xls" />
+      </label>
+      <p class="file-types">僅接受 Excel 工作表（.xlsx / .xls）</p>
+    </div>
+
+    <!-- 已選擇的檔案 -->
+    <div id="selected-file" aria-live="polite">
+      <span>📄</span>
+      <span class="file-name" id="file-name-label"></span>
+      <span id="file-size-label" style="font-size:11px;color:var(--muted);white-space:nowrap;"></span>
+      <button id="clear-btn" title="清除" aria-label="清除已選擇的檔案">✕</button>
+    </div>
+
+    <!-- 送出按鈕 -->
+    <div id="submit-section">
+      <button id="submit-btn" class="btn btn-primary" type="button">
+        <span>🚀</span>
+        <span>開始 AI 語義分析與標準化</span>
+      </button>
+    </div>
+
+    <!-- ③ 即時進度面板 -->
+    <div id="status-panel" aria-live="polite" aria-atomic="false">
+      <div class="status-header">
+        <span>處理進度</span>
+        <span id="row-counter"></span>
+      </div>
+      <div class="status-body">
+        <div class="steps">
+
+          <div class="step" id="step-upload">
+            <div class="step-icon" id="icon-upload">1</div>
+            <div class="step-content">
+              <div class="step-label">上傳檔案至伺服器</div>
+              <div class="step-detail" id="detail-upload">準備傳輸...</div>
+            </div>
+          </div>
+
+          <div class="step" id="step-parse">
+            <div class="step-icon" id="icon-parse">2</div>
+            <div class="step-content">
+              <div class="step-label">資料清洗與欄位識別</div>
+              <div class="step-detail" id="detail-parse">等待上傳完成...</div>
+            </div>
+          </div>
+
+          <div class="step" id="step-ai">
+            <div class="step-icon" id="icon-ai">3</div>
+            <div class="step-content">
+              <div class="step-label">AI 語義解析（Gemini Structured Outputs）</div>
+              <div class="step-detail" id="detail-ai">
+                等待開始<span class="dots"><span>.</span><span>.</span><span>.</span></span>
+              </div>
+              <div class="row-track" id="row-track">
+                <div class="row-fill" id="row-fill"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="step" id="step-output">
+            <div class="step-icon" id="icon-output">4</div>
+            <div class="step-content">
+              <div class="step-label">產生標準化 Excel 並下載</div>
+              <div class="step-detail" id="detail-output">等待 AI 完成...</div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ④ 成功結果 -->
+    <div id="result-panel" role="alert">
+      <span class="result-icon">✅</span>
+      <div class="result-text">
+        <h3>標準化完成，檔案已自動下載！</h3>
+        <p id="result-desc">已新增 SOAP 欄位、標準術語與人工審核標記。</p>
+      </div>
+    </div>
+
+    <!-- ⑤ 錯誤訊息 -->
+    <div id="error-panel" role="alert"></div>
+
+  </main>
+
+  <footer class="footer">
+    由 FastAPI + Google Gemini 2.0 Flash + Pydantic v2 驅動（完全免費方案）<br>
+    置信度 &lt; 0.7 的資料列自動標記「待人工審核標記: TRUE」
+  </footer>
+
+</div>
+
+<script>
+  /* ── 元素參考 ─────────────────────────────────────────────── */
+  const dropZone      = document.getElementById('drop-zone');
+  const fileInput     = document.getElementById('file-input');
+  const selectedFile  = document.getElementById('selected-file');
+  const fileNameLabel = document.getElementById('file-name-label');
+  const fileSizeLabel = document.getElementById('file-size-label');
+  const clearBtn      = document.getElementById('clear-btn');
+  const submitSection = document.getElementById('submit-section');
+  const submitBtn     = document.getElementById('submit-btn');
+  const statusPanel   = document.getElementById('status-panel');
+  const progressFill  = document.getElementById('progress-fill');
+  const rowFill       = document.getElementById('row-fill');
+  const rowTrack      = document.getElementById('row-track');
+  const rowCounter    = document.getElementById('row-counter');
+  const resultPanel   = document.getElementById('result-panel');
+  const resultDesc    = document.getElementById('result-desc');
+  const errorPanel    = document.getElementById('error-panel');
+
+  /** @type {File|null} */
+  let selectedFileObj = null;
+  /** @type {string} 目前選取的模板 key */
+  let selectedTemplate = 'soap';
+  /** @type {EventSource|null} 目前的 SSE 連線 */
+  let sseSource = null;
+  /** @type {boolean} 是否正在處理中 */
+  let isProcessing = false;
+
+  /* ── 模板切換 ─────────────────────────────────────────────── */
+  document.querySelectorAll('.tpl-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tpl-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedTemplate = btn.dataset.tpl;
+    });
+  });
+
+  /* ── 工具函式 ─────────────────────────────────────────────── */
+  const fmt = b =>
+    b < 1024 ? `${b} B` :
+    b < 1048576 ? `${(b/1024).toFixed(1)} KB` :
+    `${(b/1048576).toFixed(2)} MB`;
+
+  const isExcel = f => /\.(xlsx|xls)$/i.test(f.name);
+
+  function setStep(id, state, detail = null) {
+    const el     = document.getElementById(`step-${id}`);
+    const icon   = document.getElementById(`icon-${id}`);
+    const detEl  = document.getElementById(`detail-${id}`);
+    const nums   = { upload: '1', parse: '2', ai: '3', output: '4' };
+
+    el.classList.remove('active', 'done', 'error', 'warn');
+    if (state !== 'pending') el.classList.add(state);
+
+    if (state === 'active') {
+      icon.innerHTML = '<span class="spinner"></span>';
+    } else {
+      const glyphs = { done: '✓', error: '✗', warn: '!', pending: nums[id] };
+      icon.textContent = glyphs[state] ?? nums[id];
+    }
+
+    if (detail !== null && detEl) detEl.textContent = detail;
+  }
+
+  function setProgress(pct) {
+    progressFill.style.width = `${pct}%`;
+  }
+
+  function setRowProgress(current, total) {
+    const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+    rowFill.style.width = `${pct}%`;
+    rowTrack.classList.add('visible');
+    rowCounter.textContent = `${current} / ${total} 列`;
+  }
+
+  function showError(msg) {
+    errorPanel.textContent = `⚠ ${msg}`;
+    errorPanel.classList.add('visible');
+  }
+
+  function resetUI() {
+    statusPanel.classList.remove('visible');
+    resultPanel.classList.remove('visible');
+    errorPanel.classList.remove('visible');
+    errorPanel.textContent = '';
+    rowTrack.classList.remove('visible');
+    rowCounter.textContent = '';
+    setProgress(0);
+    rowFill.style.width = '0%';
+    ['upload', 'parse', 'ai', 'output'].forEach((id, i) => {
+      document.getElementById(`step-${id}`).classList.remove('active','done','error','warn');
+      document.getElementById(`icon-${id}`).textContent = String(i + 1);
+    });
+    document.getElementById('detail-upload').textContent = '準備傳輸...';
+    document.getElementById('detail-parse').textContent  = '等待上傳完成...';
+    document.getElementById('detail-ai').innerHTML =
+      '等待開始<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
+    document.getElementById('detail-output').textContent = '等待 AI 完成...';
+  }
+
+  /* ── 檔案選取 ─────────────────────────────────────────────── */
+  function applyFile(f) {
+    if (isProcessing) return;
+    if (!isExcel(f)) {
+      alert(`❌ 不支援的格式：「${f.name}」\n請選擇 .xlsx 或 .xls 檔案。`);
+      return;
+    }
+    if (f.size > 10 * 1024 * 1024) {
+      alert(`❌ 檔案過大（${fmt(f.size)}），上限為 10 MB。`);
+      return;
+    }
+    if (sseSource) { sseSource.close(); sseSource = null; }
+    selectedFileObj = f;
+    fileNameLabel.textContent = f.name;
+    fileSizeLabel.textContent = fmt(f.size);
+    selectedFile.classList.add('visible');
+    submitSection.classList.add('visible');
+    resetUI();
+  }
+
+  function clearFile() {
+    if (isProcessing) return;
+    selectedFileObj = null;
+    fileInput.value = '';
+    if (sseSource) { sseSource.close(); sseSource = null; }
+    selectedFile.classList.remove('visible');
+    submitSection.classList.remove('visible');
+    resetUI();
+  }
+
+  dropZone.addEventListener('click', e => {
+    if (isProcessing) return;
+    if (!e.target.closest('#pick-btn')) fileInput.click();
+  });
+  dropZone.addEventListener('dragover', e => {
+    if (isProcessing) return;
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', e => {
+    if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over');
+  });
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (!isProcessing && e.dataTransfer.files[0]) applyFile(e.dataTransfer.files[0]);
+  });
+  dropZone.addEventListener('keydown', e => {
+    if (!isProcessing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); fileInput.click(); }
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) applyFile(fileInput.files[0]); });
+  clearBtn.addEventListener('click', clearFile);
+
+  /* ── 核心：上傳 → SSE → 下載 ─────────────────────────────── */
+  submitBtn.addEventListener('click', async () => {
+    if (!selectedFileObj || isProcessing) return;
+
+    isProcessing = true;
+    submitBtn.disabled = true;
+    clearBtn.disabled = true;
+    dropZone.style.pointerEvents = 'none';
+    dropZone.style.opacity = '0.6';
+    if (sseSource) { sseSource.close(); sseSource = null; }
+    errorPanel.classList.remove('visible');
+    resultPanel.classList.remove('visible');
+    resetUI();
+    statusPanel.classList.add('visible');
+
+    /* ── 步驟 1：上傳取得 task_id ── */
+    try {
+      setStep('upload', 'active', `正在上傳「${selectedFileObj.name}」...`);
+      setProgress(8);
+
+      const fd = new FormData();
+      fd.append('file', selectedFileObj);
+      fd.append('template', selectedTemplate);
+
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: fd });
+
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${uploadRes.status}`);
+      }
+
+      const { task_id } = await uploadRes.json();
+      setStep('upload', 'done', `上傳完成（${fmt(selectedFileObj.size)}）`);
+      setProgress(20);
+
+      /* ── 步驟 2：資料清洗（後端即時處理，前端顯示等待狀態） ── */
+      setStep('parse', 'active', '伺服器正在清洗資料並識別所有欄位...');
+      setProgress(30);
+
+      /* ── 步驟 3：開啟 SSE 監聽進度 ── */
+      setStep('ai', 'active');
+      setProgress(35);
+
+      await new Promise((resolve, reject) => {
+        sseSource = new EventSource(`/api/stream/${task_id}`);
+
+        sseSource.onmessage = e => {
+          let event;
+          try { event = JSON.parse(e.data); } catch { return; }
+
+          if (event.type === 'ping') return;
+
+          if (event.type === 'progress') {
+            setStep('parse', 'done', '資料清洗完成，欄位動態識別成功');
+
+            const { current, total, sheet, sheet_index, sheets_total } = event;
+            const sheetInfo = sheets_total > 1
+              ? ` (工作表 ${sheet_index}/${sheets_total}：${sheet})`
+              : '';
+            setStep('ai', 'active',
+              `正在解析第 ${current}/${total} 列${sheetInfo}...`
+            );
+            setRowProgress(current, total);
+
+            /* 進度條：35% → 88%，依整體進度計算（避免多 Sheet 時倒退） */
+            const overallPct = ((sheet_index - 1) + current / total) / sheets_total;
+            const aiPct = 35 + Math.round(overallPct * 53);
+            setProgress(aiPct);
+
+          } else if (event.type === 'warning') {
+            /* 工作表警告（如空 Sheet）：在 detail 顯示 */
+            const detEl = document.getElementById('detail-ai');
+            if (detEl) detEl.textContent = `⚠ ${event.message}`;
+
+          } else if (event.type === 'done') {
+            sseSource.close();
+            sseSource = null;
+
+            setStep('parse', 'done', '資料清洗完成');
+            setStep('ai', 'done', 'AI 語義解析完成，所有欄位已填充');
+            setStep('output', 'active', '正在產生標準化 Excel...');
+            setProgress(95);
+
+            /* 觸發下載 */
+            _triggerDownload(task_id, event.filename || '標準化研究數據.xlsx')
+              .then(() => {
+                setStep('output', 'done', `「${event.filename}」下載中...`);
+                setProgress(100);
+                rowTrack.classList.remove('visible');
+                rowCounter.textContent = '';
+
+                const tplLabels = { soap: 'SOAP', isbar: 'ISBAR', general: '通用摘要' };
+                resultDesc.textContent =
+                  `模板：${tplLabels[selectedTemplate] ?? selectedTemplate}。` +
+                  `已附加 AI 解析欄位與「待人工審核標記」。` +
+                  `置信度低於 0.7 的資料列已標記 TRUE。`;
+                resultPanel.classList.add('visible');
+                resolve();
+              })
+              .catch(reject);
+
+          } else if (event.type === 'error') {
+            sseSource.close();
+            sseSource = null;
+            reject(new Error(event.message || '伺服器端處理失敗'));
+          }
+        };
+
+        sseSource.onerror = () => {
+          if (sseSource) { sseSource.close(); sseSource = null; }
+          reject(new Error('SSE 連線中斷，請重試。'));
+        };
+      });
+
+    } catch (err) {
+      console.error('[處理失敗]', err);
+      let markedError = false;
+      ['output', 'ai', 'parse', 'upload'].forEach(id => {
+        const el = document.getElementById(`step-${id}`);
+        if (!markedError && (el.classList.contains('active') || (!markedError && id === 'upload'))) {
+          setStep(id, 'error', err.message || '處理失敗');
+          markedError = true;
+        }
+      });
+      showError(err.message || '未知錯誤，請確認後端服務正在運行。');
+    } finally {
+      isProcessing = false;
+      submitBtn.disabled = false;
+      clearBtn.disabled = false;
+      dropZone.style.pointerEvents = '';
+      dropZone.style.opacity = '';
+    }
+  });
+
+  /* ── 下載輔助函式 ─────────────────────────────────────────── */
+  async function _triggerDownload(taskId, fallbackName) {
+    const res = await fetch(`/api/download/${taskId}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `下載失敗（HTTP ${res.status}）`);
+    }
+
+    const blob = await res.blob();
+
+    /* 從 Content-Disposition 解析伺服器建議檔名 */
+    const disp = res.headers.get('Content-Disposition') || '';
+    let name = fallbackName;
+    const utf8 = disp.match(/filename\*=UTF-8''([^;\s]+)/i);
+    if (utf8) {
+      try { name = decodeURIComponent(utf8[1]); } catch { /* keep fallback */ }
+    } else {
+      const ascii = disp.match(/filename="?([^";\n]+)"?/i);
+      if (ascii) name = ascii[1].trim();
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+</script>
+
+</body>
+</html>

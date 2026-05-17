@@ -1,0 +1,33 @@
+# 環境變數（含 API Key，絕不進版控）
+.env
+.env.local
+.env.*.local
+
+# Python 虛擬環境
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# 測試用 Excel（可能含病患個資）
+*.xlsx
+*.xls
+*.csv
+
+# 編輯器與系統
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 日誌
+*.log
+
+# 建置產物
+dist/
+build/
+*.egg-info/

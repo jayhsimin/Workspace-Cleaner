@@ -1,0 +1,15 @@
+# render.yaml — Render 免費方案自動部署設定
+# 官方文件：https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: ai-soap-normalizer
+    runtime: docker          # 使用 Dockerfile 建置
+    plan: free               # 免費方案（閒置 15 分鐘後休眠）
+    region: singapore        # 亞洲節點，台灣用戶延遲較低
+
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false          # 需在 Render Dashboard 手動填入，不進版控
+
+    healthCheckPath: /       # Render 用來確認服務已啟動的探針路徑
