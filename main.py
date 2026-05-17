@@ -35,7 +35,7 @@ logger = logging.getLogger("soap_processor")
 MAX_FILE_SIZE: int = 10 * 1024 * 1024   # 10 MB 上傳保護
 CONFIDENCE_THRESHOLD: float = 0.7        # 低於此分數標記人工審核
 TASK_TTL: int = 1800                     # 任務保留 30 分鐘後自動清理
-MAX_CONCURRENT_LLM: int = 3              # 同時最多 3 個 Gemini 呼叫（15 RPM 緩衝）
+MAX_CONCURRENT_LLM: int = 1              # 免費方案 5 RPM，序列處理避免超速
 
 # ─── Pydantic Schemas（三種模板）────────────────────────────────────────────
 
@@ -278,7 +278,7 @@ async def parse_row_with_llm(snapshot: str, template: str) -> Tuple[Any, bool]:
         for attempt in range(4):
             try:
                 response = await gemini_client.aio.models.generate_content(
-                    model="gemini-2.0-flash",
+                    model="gemini-2.5-flash",
                     contents=f"請分析以下異質欄位快照：\n\n{snapshot}",
                     config=config,
                 )
@@ -392,8 +392,8 @@ async def process_file(
                         "total":        total_rows,
                     })
 
-                    # 每列間隔 4 秒，確保不超過免費方案 15 RPM 上限
-                    await asyncio.sleep(4.0)
+                    # 每列間隔 12 秒，確保不超過免費方案 5 RPM 上限（60s ÷ 5）
+                    await asyncio.sleep(12.0)
 
                 result_df = pd.concat(
                     [df.reset_index(drop=True), pd.DataFrame(parsed_rows)],
