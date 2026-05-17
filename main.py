@@ -304,7 +304,10 @@ async def parse_row_with_llm(snapshot: str, template: str) -> Tuple[Any, bool]:
                         "429" in exc_str or "ResourceExhausted" in exc_name
                         or "TooManyRequests" in exc_name or "rate" in exc_str.lower()
                     )
-                    wait = 65 if is_rate_limit else (2 ** attempt * 2)
+                    # 優先使用 API 回傳的建議等待秒數（e.g. "retry in 35s"）
+                    _m = re.search(r"retry in (\d+)", exc_str)
+                    suggested = int(_m.group(1)) + 5 if _m else 0
+                    wait = max(suggested, 65) if is_rate_limit else (2 ** attempt * 2)
                     logger.warning(
                         f"Gemini 呼叫失敗（第 {attempt + 1} 次），{wait}s 後重試：{exc}"
                     )
